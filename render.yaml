@@ -1,0 +1,26 @@
+services:
+  - type: web
+    name: health-report-analyzer
+    env: docker
+    dockerfilePath: ./Dockerfile
+    plan: starter  # $7/month - minimum required for TensorFlow (2GB RAM)
+    region: oregon  # Change to your preferred region
+    healthCheckPath: /health
+    envVars:
+      - key: PORT
+        value: 5000
+      - key: PYTHONUNBUFFERED
+        value: 1
+      - key: TF_CPP_MIN_LOG_LEVEL
+        value: 2
+    
+    # Auto-deploy settings
+    autoDeploy: true
+    
+    # Build settings
+    buildFilter:
+      paths:
+        - app.py
+        - train.py
+        - requirements.txt
+        - Dockerfile
