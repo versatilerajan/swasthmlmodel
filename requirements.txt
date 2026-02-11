@@ -2,19 +2,12 @@ flask
 gunicorn
 numpy
 pandas
-tensorflow
+tensorflow==2.15.0      
 scikit-learn
-spacy
-pytesseract
-pdf2image
+joblib
 pdfplumber
-PyMuPDF
+PyMuPDF     
 Pillow
 opencv-python-headless
-joblib
+pytesseract
 python-multipart
-# Medical/Health specific
-medcat
-scispacy
-# Additional utilities
-werkzeug
