@@ -12,6 +12,7 @@ import warnings
 
 warnings.filterwarnings('ignore')
 
+# Reduce logging and disable GPU (Render doesn't have GPU)
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 tf.config.set_visible_devices([], 'GPU')
 
@@ -21,7 +22,9 @@ tf.random.set_seed(42)
 def generate_synthetic_health_data(n_samples=3000):
     print(f"Generating {n_samples} synthetic health records...")
 
+    # Vectorized generation → returns arrays
     age = np.random.randint(18, 85, size=n_samples)
+
     gender = np.random.choice(['Male', 'Female'], size=n_samples)
 
     hemoglobin       = np.random.normal(14,  2,    size=n_samples).clip(8,   18)
@@ -41,6 +44,7 @@ def generate_synthetic_health_data(n_samples=3000):
     vitamin_d        = np.random.normal(32,  14,   size=n_samples).clip(8,   70)
     vitamin_b12      = np.random.normal(420, 140,  size=n_samples).clip(180, 950)
 
+    # Vectorized health score calculation
     health_score = np.full(n_samples, 100.0, dtype=np.float32)
 
     health_score -= np.where((hemoglobin < 12) | (hemoglobin > 16), 12, 0)
@@ -56,19 +60,38 @@ def generate_synthetic_health_data(n_samples=3000):
 
     health_score = np.clip(health_score, 0, 100)
 
+    # Risk level categorization (vectorized)
     risk_level = np.select(
-        [health_score >= 80, health_score >= 60, health_score >= 40],
-        ['Low Risk', 'Moderate Risk', 'High Risk'],
+        condlist=[
+            health_score >= 80,
+            health_score >= 60,
+            health_score >= 40
+        ],
+        choicelist=['Low Risk', 'Moderate Risk', 'High Risk'],
         default='Critical'
     )
 
     df = pd.DataFrame({
-        'age': age, 'gender': gender, 'hemoglobin': hemoglobin, 'wbc': wbc,
-        'platelets': platelets, 'cholesterol': cholesterol, 'ldl': ldl, 'hdl': hdl,
-        'triglycerides': triglycerides, 'sgpt': sgpt, 'sgot': sgot,
-        'creatinine': creatinine, 'urea': urea, 'fasting_glucose': fasting_glucose,
-        'hba1c': hba1c, 'tsh': tsh, 'vitamin_d': vitamin_d, 'vitamin_b12': vitamin_b12,
-        'health_score': health_score, 'risk_level': risk_level
+        'age': age,
+        'gender': gender,
+        'hemoglobin': hemoglobin,
+        'wbc': wbc,
+        'platelets': platelets,
+        'cholesterol': cholesterol,
+        'ldl': ldl,
+        'hdl': hdl,
+        'triglycerides': triglycerides,
+        'sgpt': sgpt,
+        'sgot': sgot,
+        'creatinine': creatinine,
+        'urea': urea,
+        'fasting_glucose': fasting_glucose,
+        'hba1c': hba1c,
+        'tsh': tsh,
+        'vitamin_d': vitamin_d,
+        'vitamin_b12': vitamin_b12,
+        'health_score': health_score,
+        'risk_level': risk_level
     })
 
     print(f"Dataset shape: {df.shape}")
@@ -99,13 +122,13 @@ def create_risk_classification_model(input_dim, num_classes):
     return model
 
 def train_models():
-    print("=== Starting model training ===")
+    print("=== HEALTH MODEL TRAINING STARTED ===")
     os.makedirs('models', exist_ok=True)
 
-    print("\n[1/5] Generating data...")
+    print("\n[1/5] Generating synthetic data...")
     df = generate_synthetic_health_data(n_samples=3000)
 
-    print("\n[2/5] Preparing features...")
+    print("\n[2/5] Preparing features & encoding...")
     gender_encoder = LabelEncoder()
     df['gender_encoded'] = gender_encoder.fit_transform(df['gender'])
 
@@ -127,7 +150,7 @@ def train_models():
         X, y_score, y_risk, test_size=0.25, random_state=42
     )
 
-    print("\n[3/5] Scaling...")
+    print("\n[3/5] Feature scaling...")
     scaler = StandardScaler()
     X_train_scaled = scaler.fit_transform(X_train)
 
@@ -136,7 +159,7 @@ def train_models():
         keras.callbacks.ReduceLROnPlateau(monitor='val_loss', factor=0.5, patience=4, min_lr=1e-5)
     ]
 
-    print("\n[4/5] Training health score model...")
+    print("\n[4/5] Training health score regression model...")
     score_model = create_health_score_model(X_train_scaled.shape[1])
     score_model.fit(
         X_train_scaled, y_score_train,
@@ -147,7 +170,7 @@ def train_models():
         verbose=1
     )
 
-    print("\n[5/5] Training risk model...")
+    print("\n[5/5] Training risk classification model...")
     num_classes = len(risk_encoder.classes_)
     risk_model = create_risk_classification_model(X_train_scaled.shape[1], num_classes)
     risk_model.fit(
@@ -159,21 +182,59 @@ def train_models():
         verbose=1
     )
 
-    print("\nSaving models...")
+    print("\nSaving models and artifacts...")
+
+    # Save models
     score_model.save('models/health_score_model.keras')
     risk_model.save('models/risk_classification_model.keras')
+
+    # Save scalers and encoders
     joblib.dump(scaler,         'models/scaler.pkl')
     joblib.dump(gender_encoder, 'models/gender_encoder.pkl')
     joblib.dump(risk_encoder,   'models/risk_encoder.pkl')
 
+    # Save metadata
+    metadata = {
+        'feature_columns': feature_cols,
+        'risk_classes': risk_encoder.classes_.tolist(),
+        'model_version': '2025-02-fixed',
+        'training_samples': len(df)
+    }
     with open('models/model_metadata.json', 'w') as f:
-        json.dump({
-            'feature_columns': feature_cols,
-            'risk_classes': risk_encoder.classes_.tolist(),
-            'model_version': '2025-02-fixed'
-        }, f, indent=2)
+        json.dump(metadata, f, indent=4)
 
-    print("\nTraining finished.")
+    # Save report_templates.json (this was missing → caused your FileNotFound)
+    report_templates = {
+        'blood_test_keywords': [
+            'hemoglobin', 'hb', 'wbc', 'white blood cell', 'platelets',
+            'rbc', 'red blood cell', 'hematocrit', 'mcv', 'mch'
+        ],
+        'lipid_keywords': [
+            'cholesterol', 'ldl', 'hdl', 'triglycerides', 'vldl',
+            'lipid profile', 'total cholesterol'
+        ],
+        'liver_keywords': [
+            'sgpt', 'alt', 'sgot', 'ast', 'alp', 'bilirubin', 'liver function'
+        ],
+        'kidney_keywords': [
+            'creatinine', 'urea', 'bun', 'uric acid', 'kidney function'
+        ],
+        'diabetes_keywords': [
+            'glucose', 'sugar', 'hba1c', 'glycated hemoglobin',
+            'fasting blood sugar', 'fbs', 'ppbs'
+        ],
+        'thyroid_keywords': [
+            'tsh', 'thyroid', 't3', 't4', 'free t3', 'free t4'
+        ],
+        'vitamin_keywords': [
+            'vitamin d', '25-oh vitamin d', 'vitamin b12', 'b12', 'folate'
+        ]
+    }
+    with open('models/report_templates.json', 'w') as f:
+        json.dump(report_templates, f, indent=4)
+
+    print("\nTraining completed successfully.")
+    print("Files created in models/:")
     os.system('ls -la models/')
 
 if __name__ == "__main__":
