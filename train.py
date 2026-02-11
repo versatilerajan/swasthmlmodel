@@ -12,7 +12,6 @@ import warnings
 
 warnings.filterwarnings('ignore')
 
-# Reduce TF verbosity and disable GPU (not available on Render anyway)
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 tf.config.set_visible_devices([], 'GPU')
 
@@ -22,10 +21,8 @@ tf.random.set_seed(42)
 def generate_synthetic_health_data(n_samples=3000):
     print(f"Generating {n_samples} synthetic health records...")
 
-    # All random calls must have size= → returns array → .clip() works
-    age              = np.random.randint(18, 85,   size=n_samples)
-
-    gender           = np.random.choice(['Male', 'Female'], size=n_samples)
+    age = np.random.randint(18, 85, size=n_samples)
+    gender = np.random.choice(['Male', 'Female'], size=n_samples)
 
     hemoglobin       = np.random.normal(14,  2,    size=n_samples).clip(8,   18)
     wbc              = np.random.normal(7500, 2000, size=n_samples).clip(4000, 15000)
@@ -44,7 +41,6 @@ def generate_synthetic_health_data(n_samples=3000):
     vitamin_d        = np.random.normal(32,  14,   size=n_samples).clip(8,   70)
     vitamin_b12      = np.random.normal(420, 140,  size=n_samples).clip(180, 950)
 
-    # Vectorized health score calculation
     health_score = np.full(n_samples, 100.0, dtype=np.float32)
 
     health_score -= np.where((hemoglobin < 12) | (hemoglobin > 16), 12, 0)
@@ -60,41 +56,22 @@ def generate_synthetic_health_data(n_samples=3000):
 
     health_score = np.clip(health_score, 0, 100)
 
-    # Risk level (vectorized)
     risk_level = np.select(
-        condlist=[
-            health_score >= 80,
-            health_score >= 60,
-            health_score >= 40
-        ],
-        choicelist=['Low Risk', 'Moderate Risk', 'High Risk'],
+        [health_score >= 80, health_score >= 60, health_score >= 40],
+        ['Low Risk', 'Moderate Risk', 'High Risk'],
         default='Critical'
     )
 
     df = pd.DataFrame({
-        'age': age,
-        'gender': gender,
-        'hemoglobin': hemoglobin,
-        'wbc': wbc,
-        'platelets': platelets,
-        'cholesterol': cholesterol,
-        'ldl': ldl,
-        'hdl': hdl,
-        'triglycerides': triglycerides,
-        'sgpt': sgpt,
-        'sgot': sgot,
-        'creatinine': creatinine,
-        'urea': urea,
-        'fasting_glucose': fasting_glucose,
-        'hba1c': hba1c,
-        'tsh': tsh,
-        'vitamin_d': vitamin_d,
-        'vitamin_b12': vitamin_b12,
-        'health_score': health_score,
-        'risk_level': risk_level
+        'age': age, 'gender': gender, 'hemoglobin': hemoglobin, 'wbc': wbc,
+        'platelets': platelets, 'cholesterol': cholesterol, 'ldl': ldl, 'hdl': hdl,
+        'triglycerides': triglycerides, 'sgpt': sgpt, 'sgot': sgot,
+        'creatinine': creatinine, 'urea': urea, 'fasting_glucose': fasting_glucose,
+        'hba1c': hba1c, 'tsh': tsh, 'vitamin_d': vitamin_d, 'vitamin_b12': vitamin_b12,
+        'health_score': health_score, 'risk_level': risk_level
     })
 
-    print(f"Dataset created — shape: {df.shape}")
+    print(f"Dataset shape: {df.shape}")
     return df
 
 def create_health_score_model(input_dim):
@@ -122,13 +99,13 @@ def create_risk_classification_model(input_dim, num_classes):
     return model
 
 def train_models():
-    print("=== HEALTH MODEL TRAINING (fixed version) ===")
+    print("=== Starting model training ===")
     os.makedirs('models', exist_ok=True)
 
-    print("\n[1/5] Generating synthetic data...")
+    print("\n[1/5] Generating data...")
     df = generate_synthetic_health_data(n_samples=3000)
 
-    print("\n[2/5] Encoding & feature preparation...")
+    print("\n[2/5] Preparing features...")
     gender_encoder = LabelEncoder()
     df['gender_encoded'] = gender_encoder.fit_transform(df['gender'])
 
@@ -150,7 +127,7 @@ def train_models():
         X, y_score, y_risk, test_size=0.25, random_state=42
     )
 
-    print("\n[3/5] Scaling features...")
+    print("\n[3/5] Scaling...")
     scaler = StandardScaler()
     X_train_scaled = scaler.fit_transform(X_train)
 
@@ -159,7 +136,7 @@ def train_models():
         keras.callbacks.ReduceLROnPlateau(monitor='val_loss', factor=0.5, patience=4, min_lr=1e-5)
     ]
 
-    print("\n[4/5] Training regression model (health score)...")
+    print("\n[4/5] Training health score model...")
     score_model = create_health_score_model(X_train_scaled.shape[1])
     score_model.fit(
         X_train_scaled, y_score_train,
@@ -170,7 +147,7 @@ def train_models():
         verbose=1
     )
 
-    print("\n[5/5] Training classification model (risk level)...")
+    print("\n[5/5] Training risk model...")
     num_classes = len(risk_encoder.classes_)
     risk_model = create_risk_classification_model(X_train_scaled.shape[1], num_classes)
     risk_model.fit(
@@ -182,22 +159,21 @@ def train_models():
         verbose=1
     )
 
-    print("\nSaving artifacts...")
+    print("\nSaving models...")
     score_model.save('models/health_score_model.keras')
     risk_model.save('models/risk_classification_model.keras')
     joblib.dump(scaler,         'models/scaler.pkl')
     joblib.dump(gender_encoder, 'models/gender_encoder.pkl')
     joblib.dump(risk_encoder,   'models/risk_encoder.pkl')
 
-    # Minimal metadata
     with open('models/model_metadata.json', 'w') as f:
         json.dump({
             'feature_columns': feature_cols,
             'risk_classes': risk_encoder.classes_.tolist(),
-            'model_version': '0.1-fixed-2025'
+            'model_version': '2025-02-fixed'
         }, f, indent=2)
 
-    print("\nTraining completed. Files in models/:")
+    print("\nTraining finished.")
     os.system('ls -la models/')
 
 if __name__ == "__main__":
