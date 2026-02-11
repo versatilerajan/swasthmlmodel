@@ -40,64 +40,67 @@ report_templates = {}
 models_loaded = False
 
 def load_models():
-    """Load all models and artifacts on startup"""
     global health_score_model, risk_model, scaler, gender_encoder, risk_encoder
     global metadata, report_templates, models_loaded
-    
-    try:
-        print("=" * 60)
-        print("LOADING HEALTH ANALYSIS MODELS...")
-        print("=" * 60)
-        
-        if not os.path.exists('models'):
-            print("ERROR: models directory not found")
-            return False
-        
-        print("Models directory contents:")
-        for f in os.listdir('models'):
-            print(f" - {f}")
-        
-        health_score_model = keras.models.load_model('models/health_score_model.keras')
-        print("✓ Health score model loaded")
-        
-        risk_model = keras.models.load_model('models/risk_classification_model.keras')
-        print("✓ Risk classification model loaded")
-        
-        scaler = joblib.load('models/scaler.pkl')
-        print("✓ Feature scaler loaded")
-        
-        gender_encoder = joblib.load('models/gender_encoder.pkl')
-        print("✓ Gender encoder loaded")
-        
-        risk_encoder = joblib.load('models/risk_encoder.pkl')
-        print("✓ Risk encoder loaded")
-        
-        with open('models/model_metadata.json', 'r') as f:
-            metadata = json.load(f)
-        print("✓ Metadata loaded")
-        
-        with open('models/report_templates.json', 'r') as f:
-            report_templates = json.load(f)
-        print("✓ Report templates loaded")
-        
-        print("=" * 60)
-        print("ALL MODELS LOADED SUCCESSFULLY")
-        print("=" * 60)
-        
-        models_loaded = True
-        return True
-        
-    except Exception as e:
-        print(f"ERROR loading models: {e}")
-        print(traceback.format_exc())
+
+    MODELS_DIR = '/app/models'   # explicit absolute path
+
+    print("=== LOADING MODELS ===")
+    print("Current dir:", os.getcwd())
+    print(f"Checking {MODELS_DIR} ...")
+
+    if not os.path.exists(MODELS_DIR):
+        print(f"CRITICAL: Directory {MODELS_DIR} does NOT exist!")
         models_loaded = False
         return False
 
-# Load models on startup
+    files = os.listdir(MODELS_DIR)
+    print("Files in models/:", files)
+
+    required_files = [
+        'health_score_model.keras',
+        'risk_classification_model.keras',
+        'scaler.pkl',
+        'gender_encoder.pkl',
+        'risk_encoder.pkl',
+        'model_metadata.json',
+        'report_templates.json'
+    ]
+
+    missing = [f for f in required_files if f not in files]
+    if missing:
+        print(f"Missing files: {missing}")
+        models_loaded = False
+        return False
+
+    try:
+        health_score_model = keras.models.load_model(os.path.join(MODELS_DIR, 'health_score_model.keras'))
+        print("Health score model OK")
+
+        risk_model = keras.models.load_model(os.path.join(MODELS_DIR, 'risk_classification_model.keras'))
+        print("Risk model OK")
+
+        scaler = joblib.load(os.path.join(MODELS_DIR, 'scaler.pkl'))
+        gender_encoder = joblib.load(os.path.join(MODELS_DIR, 'gender_encoder.pkl'))
+        risk_encoder = joblib.load(os.path.join(MODELS_DIR, 'risk_encoder.pkl'))
+
+        with open(os.path.join(MODELS_DIR, 'model_metadata.json'), 'r') as f:
+            metadata = json.load(f)
+
+        with open(os.path.join(MODELS_DIR, 'report_templates.json'), 'r') as f:
+            report_templates = json.load(f)
+
+        print("All models + artifacts loaded successfully")
+        models_loaded = True
+        return True
+
+    except Exception as e:
+        print("Load failed:", type(e).__name__, str(e))
+        print(traceback.format_exc())
+        models_loaded = False
+        return False
 print("Initializing Health Report Analyzer...")
 load_models()
-
-# ==================== PDF/IMAGE PROCESSING ====================
 
 def extract_text_from_pdf_pymupdf(file_bytes):
     """Extract text from PDF using PyMuPDF"""
