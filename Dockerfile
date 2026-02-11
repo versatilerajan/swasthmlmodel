@@ -2,18 +2,32 @@ FROM python:3.10-slim
 
 WORKDIR /app
 
-# Install minimal system dependencies
+# Install minimal system dependencies — split for better caching & debugging
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-    build-essential \
-    curl \
-    libgomp1 \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+        build-essential \
+        curl \
+        libgomp1 \
+        libgl1-mesa-glx \
+        libglib2.0-0 \
+        libsm6 \
+        libxext6 \
+        libxrender-dev \
+    && apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+# Install OCR & PDF dependencies (this was the failing part)
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        poppler-utils \
+        tesseract-ocr \
+        tesseract-ocr-eng \
+        libtesseract-dev \
+    && apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first for better caching
 COPY requirements.txt .
-
 # Install Python packages
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
