@@ -1,0 +1,20 @@
+flask
+gunicorn
+numpy
+pandas
+tensorflow
+scikit-learn
+spacy
+pytesseract
+pdf2image
+pdfplumber
+PyMuPDF
+Pillow
+opencv-python-headless
+joblib
+python-multipart
+# Medical/Health specific
+medcat
+scispacy
+# Additional utilities
+werkzeug
